@@ -13,7 +13,7 @@ class OrderCard extends StatelessWidget {
   final User? user;
   final StatusChangeCallback onChangeStatus;
 
-  const OrderCard({Key? key, required this.order, required this.user, required this.onChangeStatus}) : super(key: key);
+  const OrderCard({super.key, required this.order, required this.user, required this.onChangeStatus});
 
   Color _statusColor(String status, BuildContext context) {
     switch (status) {
@@ -64,7 +64,7 @@ class OrderCard extends StatelessWidget {
             );
           }
           return CircleAvatar(
-            backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+            backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
             child: Text((u?.name ?? 'U')[0].toUpperCase(), style: TextStyle(color: Theme.of(context).colorScheme.primary)),
           );
   })(),

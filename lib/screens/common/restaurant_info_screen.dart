@@ -4,19 +4,42 @@ import '../../utils/launcher.dart';
 import 'package:ilgabbiano/localization/app_localizations.dart';
 
 class RestaurantInfoScreen extends StatelessWidget {
-  const RestaurantInfoScreen({Key? key}) : super(key: key);
+  const RestaurantInfoScreen({super.key});
 
   // Contact details (as requested)
   final String phone = '+39 041 554 1174';
   final String whatsapp = '+39 392 768 6418';
   final String address = 'Viale Trieste 31, Sottomarina, Venice';
+  // Facebook page: Il Gabbiano 2 (Sottomarina)
   final String facebook = 'https://www.facebook.com/ilgabbiano2Sottomarina';
 
   Future<void> _launchUrl(String url) async {
     final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
+    try {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      // Fallback to platform default if external app mode fails
+      try { await launchUrl(uri); } catch (_) {}
     }
+  }
+
+  Future<void> _openPhone() async {
+    await _launchUrl('tel:+390415541174');
+  }
+
+  Future<void> _openWhatsApp() async {
+    // Use wa.me which opens browser then deep-links into WhatsApp if installed
+    await _launchUrl('https://wa.me/393927686418');
+  }
+
+  Future<void> _openMaps() async {
+    // Use the recommended Google Maps search URL with api=1
+    final q = Uri.encodeComponent(address);
+    await _launchUrl('https://www.google.com/maps/search/?api=1&query=$q');
+  }
+
+  Future<void> _openFacebook() async {
+    await _launchUrl(facebook);
   }
 
   @override
@@ -70,7 +93,7 @@ class RestaurantInfoScreen extends StatelessWidget {
                       subtitle: Text('+39 041 554 1174'),
                       trailing: IconButton(
                         icon: const Icon(Icons.call),
-                        onPressed: () => _launchUrl('tel:+390415541174'),
+                        onPressed: _openPhone,
                       ),
                     ),
 
@@ -81,7 +104,7 @@ class RestaurantInfoScreen extends StatelessWidget {
                       subtitle: const Text('+39 392 768 6418'),
                       trailing: IconButton(
                         icon: const Icon(Icons.send, color: Colors.teal),
-                        onPressed: () => _launchUrl('https://wa.me/393927686418'),
+                        onPressed: _openWhatsApp,
                       ),
                     ),
 
@@ -92,7 +115,7 @@ class RestaurantInfoScreen extends StatelessWidget {
                       subtitle: Text(address),
                       trailing: IconButton(
                         icon: const Icon(Icons.map),
-                        onPressed: () => _launchUrl('https://www.google.com/maps/search/${Uri.encodeComponent(address)}'),
+                        onPressed: _openMaps,
                       ),
                     ),
 
@@ -100,10 +123,10 @@ class RestaurantInfoScreen extends StatelessWidget {
                       contentPadding: EdgeInsets.zero,
                       leading: const Icon(Icons.facebook, color: Colors.blue),
                       title: Text(AppLocalizations.of(context).t('facebook_label')),
-                      subtitle: Text('Il gabbiano2'),
+                      subtitle: Text('Il Gabbiano 2'),
                       trailing: IconButton(
                         icon: const Icon(Icons.open_in_new),
-                        onPressed: () => _launchUrl(facebook),
+                        onPressed: _openFacebook,
                       ),
                     ),
                   ],

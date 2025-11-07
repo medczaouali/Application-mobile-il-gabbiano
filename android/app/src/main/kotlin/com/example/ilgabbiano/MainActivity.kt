@@ -1,5 +1,6 @@
 package com.example.ilgabbiano
 
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 
-class MainActivity : FlutterActivity()
+// Required for plugins like local_auth that use AndroidX BiometricPrompt (needs FragmentActivity)
+class MainActivity : FlutterFragmentActivity()

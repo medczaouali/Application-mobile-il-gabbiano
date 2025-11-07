@@ -11,12 +11,10 @@ class GoogleAuthService {
   GoogleAuthService._internal();
 
   Future<GoogleSignInAccount?> signIn() async {
-    try {
-      final account = await _googleSignIn.signIn();
-      return account;
-    } catch (e) {
-      return null;
-    }
+    // Let exceptions bubble up so callers can distinguish between
+    // user-cancel (null) and configuration/errors (PlatformException).
+    final account = await _googleSignIn.signIn();
+    return account;
   }
 
   Future<void> signOut() async {

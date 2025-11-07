@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:ilgabbiano/models/reservation.dart';
 import 'package:ilgabbiano/l10n/strings.dart';
@@ -8,8 +9,10 @@ class ReservationCard extends StatefulWidget {
   final Reservation reservation;
   final ReservationAction onAction;
   final VoidCallback? onEdit;
+  final String? userName;
+  final String? userProfileImage;
 
-  const ReservationCard({Key? key, required this.reservation, required this.onAction, this.onEdit}) : super(key: key);
+  const ReservationCard({super.key, required this.reservation, required this.onAction, this.onEdit, this.userName, this.userProfileImage});
 
   @override
   State<ReservationCard> createState() => _ReservationCardState();
@@ -48,17 +51,35 @@ class _ReservationCardState extends State<ReservationCard> with TickerProviderSt
                 children: [
                   Row(
                     children: [
-                      CircleAvatar(child: Icon(Icons.event_note, color: Colors.white), backgroundColor: Theme.of(context).colorScheme.primary),
+                      _buildAvatar(),
                       const SizedBox(width: 12),
-                      Expanded(child: Text('${Strings.reservationFor} ${r.people} personnes', style: TextStyle(fontWeight: FontWeight.w600))),
-                      Chip(label: Text(r.status), backgroundColor: _statusColor(r.status)),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              (widget.userName != null && widget.userName!.isNotEmpty)
+                                  ? '${widget.userName} • ${r.people} pers'
+                                  : '${Strings.reservationFor} ${r.people} personnes',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                            Text('Le ${r.date} à ${r.time}', style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color)),
+                          ],
+                        ),
+                      ),
+                      Chip(
+                        label: Text(r.status, style: TextStyle(color: Colors.white)),
+                        backgroundColor: _statusColor(r.status),
+                      ),
                       const SizedBox(width: 8),
                       AnimatedRotation(duration: Duration(milliseconds: 180), turns: _expanded ? 0.5 : 0.0, child: Icon(Icons.expand_more)),
                     ],
                   ),
                   if (_expanded) ...[
                     const SizedBox(height: 8),
-                    Text('Le ${r.date} à ${r.time}'),
+                    Row(children: [Icon(Icons.people, size: 18), SizedBox(width: 6), Text('${r.people} personne(s)')]),
                     if ((r.notes ?? '').isNotEmpty) ...[const SizedBox(height: 8), Text(r.notes!)],
                     const SizedBox(height: 12),
                     LayoutBuilder(builder: (context, constraints) {
@@ -142,5 +163,20 @@ class _ReservationCardState extends State<ReservationCard> with TickerProviderSt
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Widget _buildAvatar() {
+    final img = widget.userProfileImage;
+    final name = widget.userName;
+    if (img != null && img.isNotEmpty) {
+      final ImageProvider provider = img.startsWith('http')
+          ? NetworkImage(img)
+          : FileImage(File(img));
+      return CircleAvatar(backgroundImage: provider);
+    }
+    if (name != null && name.isNotEmpty) {
+      return CircleAvatar(child: Text(name.substring(0, 1).toUpperCase()));
+    }
+    return CircleAvatar(child: Icon(Icons.person_outline));
   }
 }

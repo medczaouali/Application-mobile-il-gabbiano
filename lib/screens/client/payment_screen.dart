@@ -8,6 +8,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:ilgabbiano/localization/app_localizations.dart';
 
 class PaymentScreen extends StatefulWidget {
+  const PaymentScreen({super.key});
   @override
   _PaymentScreenState createState() => _PaymentScreenState();
 }

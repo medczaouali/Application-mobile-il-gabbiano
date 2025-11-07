@@ -7,12 +7,12 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   final bool isBanned;
 
   const CustomAppBar({
-    Key? key,
+    super.key,
     required this.title,
     this.actions,
     this.isClient = false,
     this.isBanned = false,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

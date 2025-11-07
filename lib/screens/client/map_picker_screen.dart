@@ -8,7 +8,7 @@ import 'package:ilgabbiano/localization/app_localizations.dart';
 
 class MapPickerScreen extends StatefulWidget {
   final LatLng? initialLocation;
-  const MapPickerScreen({Key? key, this.initialLocation}) : super(key: key);
+  const MapPickerScreen({super.key, this.initialLocation});
 
   @override
   _MapPickerScreenState createState() => _MapPickerScreenState();
@@ -64,9 +64,25 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
   }
 
   Future<void> _useMyLocation() async {
+    final l10n = AppLocalizations.of(context);
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).t('location_services_disabled'))));
+      // Propose to open location settings so the user can enable GPS
+      if (!mounted) return;
+      final open = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(l10n.t('permission_denied_forever_title')),
+          content: Text(l10n.t('location_services_disabled')),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(l10n.t('cancel'))),
+            TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: Text(l10n.t('open_settings'))),
+          ],
+        ),
+      );
+      if (open == true) {
+        await Geolocator.openLocationSettings();
+      }
       return;
     }
 
@@ -74,20 +90,22 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Permission de localisation refusée')));
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.t('get_position_failed'))));
         return;
       }
     }
     if (permission == LocationPermission.deniedForever) {
       // Offer to open app settings so the user can enable location permission
+      if (!mounted) return;
       final open = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: Text(AppLocalizations.of(context).t('permission_denied_forever_title')),
-          content: Text(AppLocalizations.of(context).t('permission_denied_forever_message')),
+          title: Text(l10n.t('permission_denied_forever_title')),
+          content: Text(l10n.t('permission_denied_forever_message')),
           actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(AppLocalizations.of(context).t('cancel'))),
-            TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: Text(AppLocalizations.of(context).t('open_settings'))),
+            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(l10n.t('cancel'))),
+            TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: Text(l10n.t('open_settings'))),
           ],
         ),
       );
@@ -100,14 +118,20 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
     try {
       Position? pos;
       try {
-        pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.best, timeLimit: Duration(seconds: 10));
+        pos = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.best,
+            timeLimit: Duration(seconds: 10),
+          ),
+        );
       } catch (_) {
         // Fallback to last known position if current position times out or fails
         pos = await Geolocator.getLastKnownPosition();
       }
 
       if (pos == null) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).t('get_position_failed'))));
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.t('get_position_failed'))));
         return;
       }
 
@@ -118,7 +142,8 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
       });
       _reverseGeocode(latlng);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).t('get_position_failed') + ' : $e')));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.t('get_position_failed') + ' : $e')));
     }
   }
 
@@ -134,7 +159,10 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text('Choisir l\'emplacement')),
-      body: Column(
+      body: SafeArea(
+        top: false,
+        bottom: true,
+        child: Column(
         children: [
           Expanded(
             child: FlutterMap(
@@ -188,6 +216,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
           )
         ],
       ),
+    ),
     );
   }
 }

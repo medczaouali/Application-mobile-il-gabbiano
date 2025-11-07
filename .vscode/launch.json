@@ -1,0 +1,18 @@
+{
+  // Launch Flutter with Supabase anon key injected via --dart-define.
+  // Edit locally: set your environment variable SUPABASE_KEY, or replace ${env:SUPABASE_KEY} with your key.
+  // Never commit real keys.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Flutter: Debug (Supabase)",
+      "type": "dart",
+      "request": "launch",
+      "program": "lib/main.dart",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "--dart-define=SUPABASE_KEY=${env:SUPABASE_KEY}"
+      ]
+    }
+  ]
+}

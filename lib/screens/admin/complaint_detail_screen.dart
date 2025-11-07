@@ -86,18 +86,55 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
     final userName = widget.complaint['user_name'] as String? ?? 'Utilisateur';
     final message = widget.complaint['message'] as String? ?? '';
     final status = widget.complaint['status'] as String? ?? 'pending';
+    final type = widget.complaint['type'] as String? ?? 'general';
+    Color typeColor;
+    String typeLabel;
+    switch (type) {
+      case 'technical':
+        typeColor = Colors.indigo;
+        typeLabel = 'Technique';
+        break;
+      case 'order':
+        typeColor = Colors.teal;
+        typeLabel = 'Commande';
+        break;
+      case 'food':
+        typeColor = Colors.deepOrange;
+        typeLabel = 'Plats';
+        break;
+      case 'service':
+        typeColor = Colors.purple;
+        typeLabel = 'Service';
+        break;
+      default:
+        typeColor = Colors.blueGrey;
+        typeLabel = 'Autre';
+    }
 
     return Scaffold(
       appBar: AppBar(
         title: Text('Réclamation de $userName'),
         actions: [
           Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6.0),
+            child: Center(
+              child: Container(
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: typeColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(typeLabel.toUpperCase(), style: TextStyle(fontSize: 12, color: typeColor)),
+              ),
+            ),
+          ),
+          Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12.0),
             child: Center(
               child: Container(
                 padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withOpacity(0.12),
+                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(status, style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.primary)),

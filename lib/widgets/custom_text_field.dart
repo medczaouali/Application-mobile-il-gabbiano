@@ -8,13 +8,13 @@ class CustomTextField extends StatefulWidget {
   final String? Function(String?)? validator;
 
   const CustomTextField({
-    Key? key,
+    super.key,
     required this.controller,
     required this.labelText,
     required this.icon,
     this.isPassword = false,
     this.validator,
-  }) : super(key: key);
+  });
 
   @override
   State<CustomTextField> createState() => _CustomTextFieldState();
@@ -35,15 +35,18 @@ class _CustomTextFieldState extends State<CustomTextField> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     return TextFormField(
       controller: widget.controller,
       obscureText: _obscure,
+      style: TextStyle(color: cs.onSurface),
       decoration: InputDecoration(
         labelText: widget.labelText,
-        prefixIcon: Icon(widget.icon),
+        prefixIcon: Icon(widget.icon, color: cs.primary),
         suffixIcon: widget.isPassword
             ? IconButton(
-                icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility),
+                icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility, color: cs.primary),
                 onPressed: _toggle,
               )
             : null,
@@ -51,7 +54,8 @@ class _CustomTextFieldState extends State<CustomTextField> {
           borderRadius: BorderRadius.circular(12),
         ),
         filled: true,
-        fillColor: Colors.grey[200],
+        // Respect theme for dark/light contrast; fall back to surface
+        fillColor: theme.inputDecorationTheme.fillColor ?? theme.colorScheme.surface,
       ),
       validator: widget.validator,
     );

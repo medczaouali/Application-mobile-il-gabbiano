@@ -5,11 +5,11 @@ class ChatBubble extends StatelessWidget {
   final bool isMe;
   final Color? color;
 
-  const ChatBubble({Key? key, required this.child, this.isMe = false, this.color}) : super(key: key);
+  const ChatBubble({super.key, required this.child, this.isMe = false, this.color});
 
   @override
   Widget build(BuildContext context) {
-    final bg = color ?? (isMe ? Theme.of(context).colorScheme.primary.withOpacity(0.12) : Colors.grey.shade100);
+  final bg = color ?? (isMe ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.12) : Colors.grey.shade100);
     return CustomPaint(
       painter: _BubblePainter(color: bg, isMe: isMe),
       child: Container(

@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 
 class ManageMenuScreen extends StatefulWidget {
+  const ManageMenuScreen({super.key});
   @override
   _ManageMenuScreenState createState() => _ManageMenuScreenState();
 }
@@ -16,10 +17,12 @@ class _ManageMenuScreenState extends State<ManageMenuScreen> {
   final DatabaseHelper _dbHelper = DatabaseHelper();
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
+  late Future<List<MenuItem>> _menuFuture; // cache to avoid refetch/focus loss
 
   @override
   void initState() {
     super.initState();
+    _menuFuture = _dbHelper.getMenu();
   }
 
   @override
@@ -59,7 +62,7 @@ class _ManageMenuScreenState extends State<ManageMenuScreen> {
                   height: 64,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(8),
-                    color: Theme.of(context).colorScheme.primary.withOpacity(0.08),
+                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
                   ),
                   child: Icon(Icons.restaurant, color: Theme.of(context).colorScheme.primary),
                 ),
@@ -301,7 +304,7 @@ class _ManageMenuScreenState extends State<ManageMenuScreen> {
                     ),
                     // Category selector
                     DropdownButtonFormField<String>(
-                      value: _selectedCategory,
+                      initialValue: _selectedCategory,
                       decoration: InputDecoration(labelText: 'Catégorie'),
                       items: categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
                       onChanged: (v) => setState(() {
@@ -314,7 +317,7 @@ class _ManageMenuScreenState extends State<ManageMenuScreen> {
                       Padding(
                         padding: const EdgeInsets.only(top: 8.0),
                         child: DropdownButtonFormField<String>(
-                          value: _selectedPizzaSub ?? pizzaSub.first,
+                          initialValue: _selectedPizzaSub ?? pizzaSub.first,
                           decoration: InputDecoration(labelText: 'Sous-catégorie Pizza'),
                           items: pizzaSub.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
                           onChanged: (v) => setState(() => _selectedPizzaSub = v),
@@ -369,7 +372,7 @@ class _ManageMenuScreenState extends State<ManageMenuScreen> {
     return Scaffold(
       appBar: CustomAppBar(title: 'Gérer le Menu'),
       body: FutureBuilder<List<MenuItem>>(
-        future: _dbHelper.getMenu(),
+        future: _menuFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return Center(child: CircularProgressIndicator());

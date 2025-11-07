@@ -4,6 +4,7 @@ import '../../models/feedbacks.dart' as model;
 import '../../models/user.dart';
 
 class FeedbacksScreen extends StatefulWidget {
+  const FeedbacksScreen({super.key});
   @override
   _FeedbacksScreenState createState() => _FeedbacksScreenState();
 }

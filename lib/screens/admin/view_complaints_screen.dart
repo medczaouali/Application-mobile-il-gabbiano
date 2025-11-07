@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import '../../db/database_helper.dart';
 import '../../l10n/strings.dart';
 import 'complaint_detail_screen.dart';
+import 'package:ilgabbiano/services/ai/sentiment_service.dart';
 
 class ViewComplaintsScreen extends StatefulWidget {
+  const ViewComplaintsScreen({super.key});
   @override
   _ViewComplaintsScreenState createState() => _ViewComplaintsScreenState();
 }
@@ -16,11 +18,15 @@ class _ViewComplaintsScreenState extends State<ViewComplaintsScreen> {
   final FocusNode _searchFocusNode = FocusNode();
   DateTime? _fromDate;
   DateTime? _toDate;
+  final _sentiment = SentimentService();
+  bool _sortByPriority = true;
+  late Future<List<Map<String, dynamic>>> _complaintsFuture; // cache to avoid refetch on every keypress
 
   @override
   void initState() {
     super.initState();
     // no role filter anymore; default: no date filter, empty search
+    _complaintsFuture = _dbHelper.getComplaintsWithUser();
   }
 
   @override
@@ -39,6 +45,57 @@ class _ViewComplaintsScreenState extends State<ViewComplaintsScreen> {
 
   void _onSearchChanged() {
     if (mounted) setState(() {});
+  }
+
+  Future<void> _openStatusSheet({required int id, required String current}) async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) {
+        Widget tile(String value, String label) => ListTile(
+              leading: Icon(
+                value == 'pending'
+                    ? Icons.schedule
+                    : value == 'in_progress'
+                        ? Icons.playlist_add_check
+                        : Icons.check_circle,
+                color: _statusColor(value),
+              ),
+              title: Text(label),
+              trailing: current == value ? Icon(Icons.check, color: Theme.of(ctx).colorScheme.primary) : null,
+              onTap: () => Navigator.of(ctx).pop(value),
+            );
+
+        return SafeArea(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 4),
+                Text('Changer le statut', style: Theme.of(ctx).textTheme.titleMedium),
+                const SizedBox(height: 4),
+                tile('pending', _statusLabels['pending'] ?? 'En attente'),
+                tile('in_progress', _statusLabels['in_progress'] ?? 'En cours'),
+                tile('resolved', _statusLabels['resolved'] ?? 'Résolu'),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (choice != null && choice != current) {
+      await _dbHelper.updateComplaintStatus(id, choice);
+      _complaintsFuture = _dbHelper.getComplaintsWithUser();
+      if (mounted) setState(() {});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Statut mis à jour: ${_statusLabels[choice] ?? choice}')),
+        );
+      }
+    }
   }
 
   
@@ -73,6 +130,17 @@ class _ViewComplaintsScreenState extends State<ViewComplaintsScreen> {
     }
   }
 
+  Color _sentimentColor(String label) {
+    switch (label) {
+      case 'negative':
+        return Colors.redAccent;
+      case 'positive':
+        return Colors.green;
+      default:
+        return Colors.blueGrey;
+    }
+  }
+
   String _formatRange(DateTime? from, DateTime? to) {
     String fmt(DateTime d) => '${d.day}/${d.month}/${d.year}';
     if (from == null && to == null) return '';
@@ -92,7 +160,7 @@ class _ViewComplaintsScreenState extends State<ViewComplaintsScreen> {
   appBar: AppBar(title: Text(Strings.complaintsTitle)),
       body: SafeArea(
         child: FutureBuilder<List<Map<String, dynamic>>>(
-          future: _dbHelper.getComplaintsWithUser(),
+          future: _complaintsFuture,
           builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return Center(child: CircularProgressIndicator());
@@ -130,6 +198,14 @@ class _ViewComplaintsScreenState extends State<ViewComplaintsScreen> {
 
             return matchesSearch && matchesDate;
           }).toList();
+
+          if (_sortByPriority) {
+            complaints.sort((a, b) {
+              final sa = _sentiment.analyze((a['message'] as String?) ?? '');
+              final sb = _sentiment.analyze((b['message'] as String?) ?? '');
+              return sb.priority.compareTo(sa.priority); // high first
+            });
+          }
 
           return Column(
             children: [
@@ -196,6 +272,11 @@ class _ViewComplaintsScreenState extends State<ViewComplaintsScreen> {
                         child: Text('Effacer'),
                       ),
                     ],
+                    IconButton(
+                      tooltip: _sortByPriority ? 'Trier: priorité (élevée d\'abord)' : 'Trier: par date/filtre',
+                      icon: Icon(Icons.priority_high, color: _sortByPriority ? Colors.redAccent : null),
+                      onPressed: () => setState(() => _sortByPriority = !_sortByPriority),
+                    ),
                     SizedBox(width: 8),
                     Text('${complaints.length} réclamation(s)'),
                   ],
@@ -214,93 +295,174 @@ class _ViewComplaintsScreenState extends State<ViewComplaintsScreen> {
                     final userRole = c['user_role'] as String? ?? '';
                     final userProfileImage = c['user_profile_image'] as String?;
                     final message = c['message'] as String? ?? '';
+                    final tone = _sentiment.analyze(message);
                     final status = c['status'] as String? ?? 'pending';
+                    final type = c['type'] as String? ?? 'general';
+                    Color typeColor;
+                    String typeLabel;
+                    switch (type) {
+                      case 'technical':
+                        typeColor = Colors.indigo;
+                        typeLabel = 'Technique';
+                        break;
+                      case 'order':
+                        typeColor = Colors.teal;
+                        typeLabel = 'Commande';
+                        break;
+                      case 'food':
+                        typeColor = Colors.deepOrange;
+                        typeLabel = 'Plats';
+                        break;
+                      case 'service':
+                        typeColor = Colors.purple;
+                        typeLabel = 'Service';
+                        break;
+                      default:
+                        typeColor = Colors.blueGrey;
+                        typeLabel = 'Autre';
+                    }
                     final createdAtRaw = c['created_at'] as String?;
                     final createdAt = createdAtRaw != null ? DateTime.tryParse(createdAtRaw)?.toLocal() : null;
 
-          return ListTile(
-        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                leading: userProfileImage != null && userProfileImage.isNotEmpty
-                    ? CircleAvatar(
-                        backgroundColor: Colors.transparent,
-                        backgroundImage: userProfileImage.startsWith('http')
-                            ? NetworkImage(userProfileImage) as ImageProvider
-                            : FileImage(File(userProfileImage)),
-                      )
-                    : CircleAvatar(
-                        backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                        child: Text(
-                          (userName.isNotEmpty ? userName[0].toUpperCase() : '?'),
-                          style: TextStyle(color: Theme.of(context).colorScheme.primary),
+          return InkWell(
+            onTap: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => ComplaintDetailScreen(complaint: c)),
+              );
+              _complaintsFuture = _dbHelper.getComplaintsWithUser();
+              if (mounted) setState(() {});
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Leading avatar
+                  userProfileImage != null && userProfileImage.isNotEmpty
+                      ? CircleAvatar(
+                          backgroundColor: Colors.transparent,
+                          backgroundImage: userProfileImage.startsWith('http')
+                              ? NetworkImage(userProfileImage) as ImageProvider
+                              : FileImage(File(userProfileImage)),
+                        )
+                      : CircleAvatar(
+                          backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                          child: Text(
+                            (userName.isNotEmpty ? userName[0].toUpperCase() : '?'),
+                            style: TextStyle(color: Theme.of(context).colorScheme.primary),
+                          ),
                         ),
-                      ),
-                title: Text(
-                  message,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                subtitle: Text(
-                  '${Strings.by} $userName · ${_roleLabel(userRole)}' + (createdAt != null ? ' · ${_formatDateTime(createdAt)}' : ''),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                trailing: SizedBox(
-                  width: 92,
-                  height: 48,
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerRight,
+                  const SizedBox(width: 12),
+                  // Title + subtitle
+                  Expanded(
                     child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.end,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                      Container(
-                        padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: _statusColor(status).withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(10),
+                        Text(
+                          message,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodyLarge,
                         ),
-                        child: Text(_statusLabels[status] ?? status,
-                            style: TextStyle(color: _statusColor(status), fontSize: 11)),
-                      ),
-                      SizedBox(height: 2),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            padding: EdgeInsets.all(4),
-                            constraints: BoxConstraints.tight(Size(28, 28)),
-                            tooltip: 'Répondre',
-                            icon: Icon(Icons.reply, size: 18),
-                              onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ComplaintDetailScreen(complaint: c))),
-                          ),
-                          PopupMenuButton<String>(
-                            padding: EdgeInsets.all(0),
-                            onSelected: (String newValue) async {
-                              if (id != null) {
-                                await _dbHelper.updateComplaintStatus(id, newValue);
-                                setState(() {});
-                              }
-                            },
-                            itemBuilder: (context) => <PopupMenuEntry<String>>[
-                              PopupMenuItem(value: 'pending', child: Text('En attente')),
-                              PopupMenuItem(value: 'in_progress', child: Text('En cours')),
-                              PopupMenuItem(value: 'resolved', child: Text('Résolu')),
-                            ],
-                            child: Icon(Icons.more_vert, size: 20),
-                          ),
-                        ],
-                      ),
-                    ],
+                        const SizedBox(height: 2),
+                        Text(
+                          '${Strings.by} $userName · ${_roleLabel(userRole)}' +
+                              (createdAt != null ? ' · ${_formatDateTime(createdAt)}' : ''),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
                     ),
                   ),
-                ),
-                onTap: () async {
-                  // open the reusable complaint dialog (contains history + reply box)
-                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => ComplaintDetailScreen(complaint: c)));
-                },
-                    );
+                  const SizedBox(width: 12),
+                  // Trailing actions (no height constraint now)
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 170),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: _statusColor(status).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            _statusLabels[status] ?? status,
+                            style: TextStyle(color: _statusColor(status), fontSize: 11),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: typeColor.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            typeLabel,
+                            style: TextStyle(color: typeColor, fontSize: 11),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: _sentimentColor(tone.label).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                tone.label == 'negative'
+                                    ? Icons.sentiment_very_dissatisfied
+                                    : tone.label == 'positive'
+                                        ? Icons.sentiment_satisfied_alt
+                                        : Icons.sentiment_neutral,
+                                size: 12,
+                                color: _sentimentColor(tone.label),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                tone.label,
+                                style: TextStyle(color: _sentimentColor(tone.label), fontSize: 10),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              padding: const EdgeInsets.all(8),
+                              constraints: BoxConstraints.tight(const Size(40, 40)),
+                              tooltip: 'Répondre',
+                              icon: const Icon(Icons.reply, size: 24),
+                              onPressed: () => Navigator.of(context).push(
+                                MaterialPageRoute(builder: (_) => ComplaintDetailScreen(complaint: c)),
+                              ),
+                            ),
+                            SizedBox(
+                              height: 40,
+                              child: OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10)),
+                                icon: const Icon(Icons.tune, size: 18),
+                                label: const Text('Statut', style: TextStyle(fontSize: 12)),
+                                onPressed: id == null ? null : () => _openStatusSheet(id: id, current: status),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
                   },
                 ),
               ),

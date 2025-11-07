@@ -10,8 +10,10 @@ import '../../services/realtime_service.dart';
 import 'dart:async';
 import 'package:provider/provider.dart';
 import 'package:ilgabbiano/providers/unread_provider.dart';
+import 'package:ilgabbiano/services/ai/sentiment_service.dart';
 
 class ComplaintHistoryScreen extends StatefulWidget {
+  const ComplaintHistoryScreen({super.key});
   @override
   _ComplaintHistoryScreenState createState() => _ComplaintHistoryScreenState();
 }
@@ -22,6 +24,7 @@ class _ComplaintHistoryScreenState extends State<ComplaintHistoryScreen> {
   late Future<List<Complaint>> _complaintsFuture;
   int? _currentUserId;
   StreamSubscription? _realtimeSub;
+  final _sentiment = SentimentService();
 
   @override
   void initState() {
@@ -154,6 +157,31 @@ class _ComplaintHistoryScreenState extends State<ComplaintHistoryScreen> {
                   statusColor = Colors.blueGrey;
               }
 
+              String type = complaint.type;
+              Color typeColor;
+              String typeLabel;
+              switch (type) {
+                case 'technical':
+                  typeColor = Colors.indigo;
+                  typeLabel = 'Technique';
+                  break;
+                case 'order':
+                  typeColor = Colors.teal;
+                  typeLabel = 'Commande';
+                  break;
+                case 'food':
+                  typeColor = Colors.deepOrange;
+                  typeLabel = 'Plats';
+                  break;
+                case 'service':
+                  typeColor = Colors.purple;
+                  typeLabel = 'Service';
+                  break;
+                default:
+                  typeColor = Colors.blueGrey;
+                  typeLabel = 'Autre';
+              }
+
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 elevation: 2,
@@ -176,12 +204,51 @@ class _ComplaintHistoryScreenState extends State<ComplaintHistoryScreen> {
                                   ),
                                   const SizedBox(width: 8),
                                   Chip(
-                                    backgroundColor: statusColor.withOpacity(0.12),
+                                    backgroundColor: statusColor.withValues(alpha: 0.12),
                                     label: Text(
                                       complaint.status.replaceAll('_', ' ').toUpperCase(),
                                       style: TextStyle(color: statusColor, fontWeight: FontWeight.w600, fontSize: 12),
                                     ),
                                   ),
+                                  const SizedBox(width: 6),
+                                  Chip(
+                                    backgroundColor: typeColor.withValues(alpha: 0.12),
+                                    label: Text(typeLabel.toUpperCase(), style: TextStyle(color: typeColor, fontWeight: FontWeight.w600, fontSize: 12)),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Builder(builder: (ctx) {
+                                    final tone = _sentiment.analyze(complaint.message);
+                                    Color toneColor;
+                                    switch (tone.label) {
+                                      case 'negative':
+                                        toneColor = Colors.redAccent;
+                                        break;
+                                      case 'positive':
+                                        toneColor = Colors.green;
+                                        break;
+                                      default:
+                                        toneColor = Colors.blueGrey;
+                                    }
+                                    return Chip(
+                                      backgroundColor: toneColor.withValues(alpha: 0.12),
+                                      label: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            tone.label == 'negative'
+                                                ? Icons.sentiment_very_dissatisfied
+                                                : tone.label == 'positive'
+                                                    ? Icons.sentiment_satisfied_alt
+                                                    : Icons.sentiment_neutral,
+                                            size: 16,
+                                            color: toneColor,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(tone.label.toUpperCase(), style: TextStyle(color: toneColor, fontWeight: FontWeight.w600, fontSize: 12)),
+                                        ],
+                                      ),
+                                    );
+                                  }),
                                 ],
                               ),
                               const SizedBox(height: 8),

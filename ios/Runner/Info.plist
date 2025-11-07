@@ -47,5 +47,20 @@
 		<true/>
 		<key>UIStatusBarHidden</key>
 		<false/>
+		<!-- FaceID usage for local_auth -->
+		<key>NSFaceIDUsageDescription</key>
+		<string>Utiliser Face ID pour déverrouiller l'application.</string>
+		<!-- URL schemes for Supabase password reset deep link: ilgabbiano://reset -->
+		<key>CFBundleURLTypes</key>
+		<array>
+			<dict>
+				<key>CFBundleTypeRole</key>
+				<string>Editor</string>
+				<key>CFBundleURLSchemes</key>
+				<array>
+					<string>ilgabbiano</string>
+				</array>
+			</dict>
+		</array>
 	</dict>
 </plist>

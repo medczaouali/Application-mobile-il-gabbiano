@@ -38,6 +38,11 @@ class DatabaseHelper {
       // Ensure DB schema compatibility when opening existing DBs
       onOpen: (Database db) async {
         await _ensureComplaintMessagesHasIsRead(db);
+        // Also defensively ensure legacy DBs have the expected columns
+        // on the complaints table (created_at, updated_at, type), since
+        // some installs may have skipped migrations and would otherwise
+        // crash on INSERT/SELECT statements referencing these columns.
+        await _ensureComplaintsColumns(db);
       },
     );
   }
@@ -108,6 +113,7 @@ class DatabaseHelper {
         user_id INTEGER NOT NULL,
         message TEXT NOT NULL,
         status TEXT NOT NULL DEFAULT 'pending',
+        type TEXT NOT NULL DEFAULT 'general',
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -193,10 +199,14 @@ class DatabaseHelper {
     if (oldVersion < 4) {
       try {
         await db.execute("ALTER TABLE users ADD COLUMN address_lat REAL");
-      } catch (e) {}
+      } catch (e) {
+        // Column may already exist; safe to ignore.
+      }
       try {
         await db.execute("ALTER TABLE users ADD COLUMN address_lng REAL");
-      } catch (e) {}
+      } catch (e) {
+        // Column may already exist; safe to ignore.
+      }
     }
     // Ensure complaints table has timestamp columns (created_at, updated_at)
     try {
@@ -206,6 +216,12 @@ class DatabaseHelper {
     }
     try {
       await db.execute("ALTER TABLE complaints ADD COLUMN updated_at TEXT");
+    } catch (e) {
+      // ignore if already exists
+    }
+    // Ensure complaints table has type column
+    try {
+      await db.execute("ALTER TABLE complaints ADD COLUMN type TEXT DEFAULT 'general'");
     } catch (e) {
       // ignore if already exists
     }
@@ -273,6 +289,29 @@ class DatabaseHelper {
       } catch (e) {
         // ignore
       }
+    }
+  }
+
+  /// Ensure the complaints table has expected columns even if migrations
+  /// were skipped on some devices. We add the columns if missing.
+  Future<void> _ensureComplaintsColumns(Database db) async {
+    try {
+      final cols = await db.rawQuery("PRAGMA table_info('complaints')");
+      bool hasCreatedAt = cols.any((c) => c['name'] == 'created_at');
+      bool hasUpdatedAt = cols.any((c) => c['name'] == 'updated_at');
+      bool hasType = cols.any((c) => c['name'] == 'type');
+
+      if (!hasCreatedAt) {
+        try { await db.execute("ALTER TABLE complaints ADD COLUMN created_at TEXT"); } catch (_) {}
+      }
+      if (!hasUpdatedAt) {
+        try { await db.execute("ALTER TABLE complaints ADD COLUMN updated_at TEXT"); } catch (_) {}
+      }
+      if (!hasType) {
+        try { await db.execute("ALTER TABLE complaints ADD COLUMN type TEXT DEFAULT 'general'"); } catch (_) {}
+      }
+    } catch (e) {
+      // If PRAGMA fails, there's not much we can do here.
     }
   }
 
@@ -508,10 +547,31 @@ class DatabaseHelper {
     return await db.update('orders', {'status': status}, where: 'id = ?', whereArgs: [id]);
   }
 
+  /// Count of new/incoming take-away orders (status = 'en attente')
+  Future<int> countPendingOrders() async {
+    final db = await database;
+    final result = await db.rawQuery("SELECT COUNT(*) as c FROM orders WHERE status = ?", ['en attente']);
+    final count = result.isNotEmpty ? (result.first['c'] as int) : 0;
+    return count;
+  }
+
   // Reservation CRUD
   Future<int> createReservation(Reservation reservation) async {
     final db = await database;
     return await db.insert('reservations', reservation.toMap());
+  }
+
+  /// Admin view: reservations joined with users to get name and profile image
+  Future<List<Map<String, dynamic>>> getReservationsWithUsers() async {
+    final db = await database;
+    final rows = await db.rawQuery('''
+      SELECT r.id, r.user_id, r.date, r.time, r.guests, r.notes, r.status,
+             u.name AS user_name, u.profile_image AS user_profile_image
+      FROM reservations r
+      JOIN users u ON r.user_id = u.id
+      ORDER BY r.date DESC, r.time ASC
+    ''');
+    return rows;
   }
 
   Future<List<Reservation>> getReservations() async {
@@ -530,6 +590,22 @@ class DatabaseHelper {
       where: 'id = ?',
       whereArgs: [id],
     );
+  }
+
+  /// Count of new/incoming reservations (status = 'pending')
+  Future<int> countPendingReservations() async {
+    final db = await database;
+    final result = await db.rawQuery("SELECT COUNT(*) as c FROM reservations WHERE status = ?", ['pending']);
+    final count = result.isNotEmpty ? (result.first['c'] as int) : 0;
+    return count;
+  }
+
+  /// Count of new/incoming complaints (status = 'pending')
+  Future<int> countPendingComplaints() async {
+    final db = await database;
+    final result = await db.rawQuery("SELECT COUNT(*) as c FROM complaints WHERE status = ?", ['pending']);
+    final count = result.isNotEmpty ? (result.first['c'] as int) : 0;
+    return count;
   }
 
   Future<int> updateReservation(Reservation reservation) async {
@@ -587,6 +663,31 @@ class DatabaseHelper {
     });
   }
 
+  /// Returns the global average rating and count of feedbacks.
+  Future<Map<String, dynamic>> getFeedbackAverage() async {
+    final db = await database;
+    final res = await db.rawQuery('SELECT AVG(rating) AS avg_rating, COUNT(*) AS total FROM feedbacks');
+    if (res.isNotEmpty) {
+      final avg = (res.first['avg_rating'] as num?)?.toDouble() ?? 0.0;
+      final total = (res.first['total'] as int?) ?? 0;
+      return {'average': avg, 'count': total};
+    }
+    return {'average': 0.0, 'count': 0};
+  }
+
+  /// Returns feedbacks joined with user info for display in lists.
+  Future<List<Map<String, dynamic>>> getFeedbacksWithUsers() async {
+    final db = await database;
+    final rows = await db.rawQuery('''
+      SELECT f.id, f.user_id, f.rating, f.comment,
+             u.name AS user_name, u.profile_image AS user_profile_image
+      FROM feedbacks f
+      JOIN users u ON f.user_id = u.id
+      ORDER BY f.rating DESC, f.id DESC
+    ''');
+    return rows;
+  }
+
   Future<int> deleteFeedback(int userId) async {
     final db = await database;
     return await db.delete('feedbacks', where: 'user_id = ?', whereArgs: [userId]);
@@ -627,7 +728,7 @@ class DatabaseHelper {
   Future<List<Map<String, dynamic>>> getComplaintsWithUser() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.rawQuery('''
-      SELECT c.id, c.user_id, c.message, c.status, c.created_at, c.updated_at, u.name AS user_name, u.role AS user_role, u.profile_image AS user_profile_image
+      SELECT c.id, c.user_id, c.message, c.status, c.type, c.created_at, c.updated_at, u.name AS user_name, u.role AS user_role, u.profile_image AS user_profile_image
       FROM complaints c
       JOIN users u ON c.user_id = u.id
       ORDER BY c.id DESC
