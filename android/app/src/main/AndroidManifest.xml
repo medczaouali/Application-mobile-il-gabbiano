@@ -1,4 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Location permissions for map picker and "Use my location" -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- Optional: only if you ever need background tracking -->
+    <!-- <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" /> -->
+
+    <!-- Declare location hardware as optional so app installs on devices without GPS -->
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
     <!-- Biometric permission for fingerprint/face unlock (some SDKs add automatically) -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <!-- For API < 29 -->

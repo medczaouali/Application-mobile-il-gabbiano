@@ -47,6 +47,9 @@
 		<true/>
 		<key>UIStatusBarHidden</key>
 		<false/>
+		<!-- Location usage for map picker / use my position -->
+		<key>NSLocationWhenInUseUsageDescription</key>
+		<string>Nous avons besoin de votre position pour remplir votre adresse.</string>
 		<!-- FaceID usage for local_auth -->
 		<key>NSFaceIDUsageDescription</key>
 		<string>Utiliser Face ID pour déverrouiller l'application.</string>

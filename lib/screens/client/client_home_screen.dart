@@ -147,7 +147,12 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
               ),
             ),
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              padding: EdgeInsets.fromLTRB(
+                16,
+                12,
+                16,
+                24 + MediaQuery.of(context).padding.bottom + 12,
+              ),
               sliver: SliverGrid(
                 delegate: SliverChildListDelegate([
                   _buildActionCard(
