@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:ilgabbiano/providers/cart_provider.dart';
 import 'package:ilgabbiano/screens/admin/admin_home_screen.dart';
 import 'package:ilgabbiano/screens/auth/login_screen.dart';
@@ -23,6 +24,7 @@ import 'screens/auth/biometric_lock_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: ".env");
   await initializeDateFormatting('fr_FR', null);
   // Initialize Supabase (password reset via link/OTP)
   try {

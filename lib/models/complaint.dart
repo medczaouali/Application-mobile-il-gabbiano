@@ -4,7 +4,7 @@ class Complaint {
   int userId;
   String message;
   String status;
-  String type; // e.g., technical, order, food, service, other
+  String category;
   String? createdAt;
   String? updatedAt;
 
@@ -13,10 +13,9 @@ class Complaint {
     required this.userId,
     required this.message,
     this.status = 'pending',
-    this.type = 'general',
+    this.category= 'Autre',
     this.createdAt,
-    this.updatedAt,
-  });
+    this.updatedAt});
 
   Map<String, dynamic> toMap() {
     return {
@@ -24,7 +23,7 @@ class Complaint {
       'user_id': userId,
       'message': message,
       'status': status,
-      'type': type,
+      'category': category,
       'created_at': createdAt,
       'updated_at': updatedAt,
     };
@@ -36,7 +35,7 @@ class Complaint {
       userId: map['user_id'],
       message: map['message'],
       status: map['status'],
-      type: (map['type'] as String?) ?? 'general',
+      category: map['category'],
       createdAt: map['created_at'] as String?,
       updatedAt: map['updated_at'] as String?,
     );

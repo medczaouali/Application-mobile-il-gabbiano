@@ -10,9 +10,6 @@ import 'dart:io';
 import '../../services/realtime_service.dart';
 import 'package:provider/provider.dart';
 import 'package:ilgabbiano/providers/unread_provider.dart';
-import 'package:ilgabbiano/localization/app_localizations.dart';
-import 'package:ilgabbiano/services/ai/content_moderation_service.dart';
-import 'package:ilgabbiano/services/ai/sentiment_service.dart';
 
 class ComplaintScreen extends StatefulWidget {
   final Complaint? complaint;
@@ -36,11 +33,18 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
   bool _hasMore = true;
   final ScrollController _scrollCtrl = ScrollController();
   StreamSubscription? _realtimeSub;
-  final _sentimentService = SentimentService();
-  SentimentResult? _sentiment;
-  String _type = 'general';
 
   bool get _isEditing => widget.complaint != null;
+  final List<String> _categories = [
+    'Service',
+    'Repas',
+    'Réservation',
+    'Paiement',
+    'Application',
+    'Autre',
+  ];
+  String? _selectedCategory;
+
 
   @override
   void initState() {
@@ -56,23 +60,10 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
 
     if (_isEditing) {
       _messageController.text = widget.complaint!.message;
-      _type = widget.complaint!.type;
+      _selectedCategory = widget.complaint!.category;
+    }else {
+      _selectedCategory = 'Autre'; // default for new complaint
     }
-
-    // Analyze tone as user types
-    _messageController.addListener(() {
-      final txt = _messageController.text;
-      if (txt.isEmpty) {
-        if (_sentiment != null) setState(() => _sentiment = null);
-      } else {
-        final s = _sentimentService.analyze(txt);
-        setState(() => _sentiment = s);
-      }
-    });
-  }
-
-  void _onTypeSelected(String value) {
-    setState(() => _type = value);
   }
 
   Future<void> _loadUserId() async {
@@ -172,7 +163,7 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
       userId: _userId!,
       message: _messageController.text,
       status: _isEditing ? widget.complaint!.status : 'pending',
-      type: _type,
+      category: _selectedCategory!, // <-- ensure non-null
     );
 
     // If editing and status is not pending, disallow updates
@@ -181,30 +172,6 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
         SnackBar(content: Text('Cette réclamation ne peut plus être modifiée.')),
       );
       return;
-    }
-
-    // Lightweight moderation before submitting
-    final moderation = await ContentModerationService().moderateText(_messageController.text);
-    if (moderation.action == ModerationAction.block) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Contenu inapproprié détecté. Veuillez reformuler votre message.')),
-      );
-      return;
-    } else if (moderation.action == ModerationAction.review) {
-      final loc = AppLocalizations.of(context);
-      final proceed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: Text(loc.t('content_maybe_inappropriate')),
-          content: Text(loc.t('continue_anyway_q')),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(loc.t('no'))),
-            TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: Text(loc.t('yes'))),
-          ],
-        ),
-      );
-      if (proceed != true) return;
     }
 
     setState(() => _isSubmitting = true);
@@ -306,22 +273,6 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
                         ),
                         SizedBox(height: 12),
 
-                        // Type de réclamation (professionnel)
-                        Text('Type de réclamation', style: Theme.of(context).textTheme.titleSmall),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            _TypeChip(label: 'Technique', value: 'technical', selected: _type == 'technical', onSelected: _onTypeSelected),
-                            _TypeChip(label: 'Commande', value: 'order', selected: _type == 'order', onSelected: _onTypeSelected),
-                            _TypeChip(label: 'Plats', value: 'food', selected: _type == 'food', onSelected: _onTypeSelected),
-                            _TypeChip(label: 'Service', value: 'service', selected: _type == 'service', onSelected: _onTypeSelected),
-                            _TypeChip(label: 'Autre', value: 'other', selected: _type == 'other' || _type == 'general', onSelected: _onTypeSelected),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-
                         // Show status chip when editing
                         if (_isEditing) ...[
                           Align(
@@ -329,25 +280,25 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
                             child: Container(
                               padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
-                color: widget.complaint!.status == 'resolved'
-                  ? Colors.green.withValues(alpha: 0.12)
-                  : widget.complaint!.status == 'in_progress'
-                    ? Colors.orange.withValues(alpha: 0.12)
-                    : Colors.blueGrey.withValues(alpha: 0.12),
+                                color: widget.complaint!.status == 'resolved'
+                                    ? Colors.green.withOpacity(0.12)
+                                    : widget.complaint!.status == 'in_progress'
+                                    ? Colors.orange.withOpacity(0.12)
+                                    : Colors.blueGrey.withOpacity(0.12),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(
                                 widget.complaint!.status == 'resolved'
                                     ? 'Résolu'
                                     : widget.complaint!.status == 'in_progress'
-                                        ? 'En cours'
-                                        : 'En attente',
+                                    ? 'En cours'
+                                    : 'En attente',
                                 style: TextStyle(
                                     color: widget.complaint!.status == 'resolved'
                                         ? Colors.green
                                         : widget.complaint!.status == 'in_progress'
-                                            ? Colors.orange
-                                            : Colors.blueGrey,
+                                        ? Colors.orange
+                                        : Colors.blueGrey,
                                     fontSize: 12),
                               ),
                             ),
@@ -411,7 +362,7 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
                                                   margin: EdgeInsets.symmetric(vertical: 6),
                                                   padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                                   decoration: BoxDecoration(
-                                                    color: isMine ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.12) : Colors.grey.shade100,
+                                                    color: isMine ? Theme.of(context).colorScheme.primary.withOpacity(0.12) : Colors.grey.shade100,
                                                     borderRadius: BorderRadius.circular(12),
                                                   ),
                                                   child: Column(
@@ -444,7 +395,7 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
                             labelText: 'Message',
                             hintText: 'Entrez les détails de votre réclamation ici...',
                             filled: true,
-                            fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                            fillColor: Theme.of(context).colorScheme.surfaceVariant,
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: BorderSide.none,
@@ -460,43 +411,33 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
                           },
                           enabled: !_isEditing || widget.complaint!.status == 'pending',
                         ),
-                        if (_sentiment != null) ...[
-                          const SizedBox(height: 8),
-                          Builder(builder: (ctx) {
-                            Color bg;
-                            IconData icon;
-                            String text;
-                            switch (_sentiment!.label) {
-                              case 'negative':
-                                bg = Colors.red.withValues(alpha: 0.1);
-                                icon = Icons.sentiment_very_dissatisfied;
-                                text = 'Le ton semble négatif. Ajoutez des détails concrets (date, heure, commande) pour accélérer le traitement.';
-                                break;
-                              case 'positive':
-                                bg = Colors.green.withValues(alpha: 0.1);
-                                icon = Icons.sentiment_satisfied_alt;
-                                text = 'Merci pour votre clarté. Notre équipe vous répondra rapidement.';
-                                break;
-                              default:
-                                bg = Colors.blueGrey.withValues(alpha: 0.08);
-                                icon = Icons.sentiment_neutral;
-                                text = 'Astuce: soyez précis pour une réponse plus rapide.';
-                            }
-                            return Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  Icon(icon, size: 18, color: Colors.grey[800]),
-                                  const SizedBox(width: 8),
-                                  Expanded(child: Text(text, style: TextStyle(fontSize: 12))),
-                                ],
-                              ),
-                            );
-                          }),
-                        ],
                         SizedBox(height: 16),
+
+                        DropdownButtonFormField<String>(
+                          value: _selectedCategory,
+                          decoration: InputDecoration(
+                            labelText: 'Catégorie',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                          ),
+                          items: _categories.map((cat) {
+                            return DropdownMenuItem(
+                              value: cat,
+                              child: Text(cat),
+                            );
+                          }).toList(),
+                          onChanged: (_isEditing && widget.complaint!.status != 'pending')
+                              ? null // si réclamation terminée → non modifiable
+                              : (value) {
+                            setState(() {
+                              _selectedCategory = value;
+                            });
+                          },
+                          validator: (v) => v == null ? 'Choisissez une catégorie' : null,
+                        ),
+                        const SizedBox(height: 16),
 
                         ElevatedButton(
                           onPressed: (_loadingUser || (_isEditing && widget.complaint!.status != 'pending') || _isSubmitting)
@@ -504,13 +445,13 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
                               : _submitComplaint,
                           child: _isSubmitting
                               ? SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation(Colors.white),
-                                  ),
-                                )
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation(Colors.white),
+                            ),
+                          )
                               : Text(_isEditing ? 'Modifier' : 'Envoyer'),
                           style: ElevatedButton.styleFrom(
                             padding: EdgeInsets.symmetric(vertical: 16),
@@ -528,26 +469,6 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _TypeChip extends StatelessWidget {
-  final String label;
-  final String value;
-  final bool selected;
-  final void Function(String) onSelected;
-  const _TypeChip({required this.label, required this.value, required this.selected, required this.onSelected});
-
-  @override
-  Widget build(BuildContext context) {
-    return ChoiceChip(
-      label: Text(label),
-      selected: selected,
-      onSelected: (_) => onSelected(value),
-      labelStyle: TextStyle(color: selected ? Colors.white : Colors.black87),
-      selectedColor: Theme.of(context).colorScheme.primary,
-      backgroundColor: Colors.grey.shade200,
     );
   }
 }

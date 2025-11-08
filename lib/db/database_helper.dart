@@ -32,7 +32,7 @@ class DatabaseHelper {
     final path = join(await getDatabasesPath(), 'ilgabbiano.db');
     return await openDatabase(
       path,
-      version: 6, // Increment to add is_read for complaint messages
+      version: 7, // Increment to add is_read for complaint messages
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       // Ensure DB schema compatibility when opening existing DBs
@@ -113,7 +113,7 @@ class DatabaseHelper {
         user_id INTEGER NOT NULL,
         message TEXT NOT NULL,
         status TEXT NOT NULL DEFAULT 'pending',
-        type TEXT NOT NULL DEFAULT 'general',
+        category TEXT,
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -219,17 +219,18 @@ class DatabaseHelper {
     } catch (e) {
       // ignore if already exists
     }
-    // Ensure complaints table has type column
-    try {
-      await db.execute("ALTER TABLE complaints ADD COLUMN type TEXT DEFAULT 'general'");
-    } catch (e) {
-      // ignore if already exists
-    }
     // Ensure complaint_messages has is_read column
     try {
       await db.execute("ALTER TABLE complaint_messages ADD COLUMN is_read INTEGER DEFAULT 0");
     } catch (e) {
       // ignore if already exists
+    }
+    if (oldVersion < 7) {
+      try {
+        await db.execute("ALTER TABLE complaints ADD COLUMN category TEXT");
+      } catch (e) {
+        // ignore si la colonne existe déjà
+      }
     }
 
     // Ensure complaint_messages table exists (for older DBs that may lack it)
@@ -299,16 +300,12 @@ class DatabaseHelper {
       final cols = await db.rawQuery("PRAGMA table_info('complaints')");
       bool hasCreatedAt = cols.any((c) => c['name'] == 'created_at');
       bool hasUpdatedAt = cols.any((c) => c['name'] == 'updated_at');
-      bool hasType = cols.any((c) => c['name'] == 'type');
 
       if (!hasCreatedAt) {
         try { await db.execute("ALTER TABLE complaints ADD COLUMN created_at TEXT"); } catch (_) {}
       }
       if (!hasUpdatedAt) {
         try { await db.execute("ALTER TABLE complaints ADD COLUMN updated_at TEXT"); } catch (_) {}
-      }
-      if (!hasType) {
-        try { await db.execute("ALTER TABLE complaints ADD COLUMN type TEXT DEFAULT 'general'"); } catch (_) {}
       }
     } catch (e) {
       // If PRAGMA fails, there's not much we can do here.
@@ -698,6 +695,7 @@ class DatabaseHelper {
     final db = await database;
     final now = DateTime.now().toIso8601String();
     final data = complaint.toMap();
+    data['category'] ??= 'Autre';
     data['created_at'] = data['created_at'] ?? now;
     data['updated_at'] = now;
     return await db.insert('complaints', data);
@@ -728,11 +726,12 @@ class DatabaseHelper {
   Future<List<Map<String, dynamic>>> getComplaintsWithUser() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.rawQuery('''
-      SELECT c.id, c.user_id, c.message, c.status, c.type, c.created_at, c.updated_at, u.name AS user_name, u.role AS user_role, u.profile_image AS user_profile_image
-      FROM complaints c
-      JOIN users u ON c.user_id = u.id
-      ORDER BY c.id DESC
-    ''');
+    SELECT c.id, c.user_id, c.message, c.status, c.category, c.created_at, c.updated_at,
+         u.name AS user_name, u.phone AS user_phone, u.role AS user_role, u.profile_image AS user_profile_image
+    FROM complaints c
+    JOIN users u ON c.user_id = u.id
+    ORDER BY c.id DESC
+''');
     return maps;
   }
 

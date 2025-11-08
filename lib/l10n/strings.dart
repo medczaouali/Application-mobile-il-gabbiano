@@ -30,4 +30,5 @@ class Strings {
   static const String reservationUpdated = 'Statut de la réservation mis à jour.';
   static const String undo = 'Annuler';
   static const String reservationReverted = 'Action annulée.';
+  static const String other='other';
 }
